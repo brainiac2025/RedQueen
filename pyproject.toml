@@ -1,0 +1,27 @@
+[project]
+name = "redqueen"
+version = "0.1.0"
+description = "Open-ended predator-prey co-evolution with evolved neural controllers, and a quantified arms-race detector."
+requires-python = ">=3.11"
+dependencies = [
+    "torch>=2.5",
+    "numpy",
+    "scipy",
+    "matplotlib",
+]
+
+[project.optional-dependencies]
+dev = ["pytest"]
+# torch.compile needs Triton; upstream Triton doesn't ship Windows wheels,
+# so this community build is required there to get inductor/fusion benefits.
+compile = ["triton-windows; sys_platform == 'win32'"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["redqueen*"]
