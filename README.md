@@ -4,6 +4,10 @@ Open-ended predator-prey co-evolution with evolved neural controllers, and a
 quantified test for whether an evolutionary arms race actually emerges. See
 [redqueen-architecture.md](redqueen-architecture.md) for the full design.
 
+![Playback of a 10,000-step evolutionary run: prey (blue) cluster into
+flocks, predators (red) hunt them, food (green) depletes locally in dense
+clusters.](media/playback_demo.gif)
+
 ## Setup
 
 ```bash
@@ -33,6 +37,7 @@ pytest
 ```bash
 python scripts/run_experiment.py --seeds 0 1 2 3 4 --n-steps 100000 --out results/experiment.json
 python scripts/run_sweeps.py --out-dir results/sweeps
+python scripts/render_playback.py --n-steps 10000 --sample-every 40 --out media/playback_demo.gif
 ```
 
 ## Status
@@ -88,6 +93,10 @@ would close most of the remaining gap but needs restructuring `step()` around
 persistent pre-allocated buffers rather than returning a fresh `WorldState`
 each call — not yet done.
 
-Next: the §11 write-up (4-6 pages), a rendered playback visualisation
-(deliverable 3, not yet built), and populating the README with playback GIFs
-per §8 week 4.
+Deliverable 3 (rendered playback, `redqueen/playback.py` /
+`scripts/render_playback.py`) is done — see the GIF above; it also surfaced
+an interesting emergent behaviour not visible in the aggregate statistics:
+prey visibly self-organize into dense flocks as the population reaches its
+cap, with food locally depleted inside clusters.
+
+Next: the §11 write-up (4-6 pages) is the one remaining deliverable.

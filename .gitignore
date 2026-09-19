@@ -7,9 +7,8 @@ dist/
 .venv/
 venv/
 
-# run outputs
+# run outputs (media/ is for committed deliverable GIFs, not excluded)
 runs/
 *.pt
 *.npz
-*.mp4
-*.gif
+/media/_*
