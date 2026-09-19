@@ -25,7 +25,8 @@ class Config:
     max_speed_prey: float = 1.0
     max_speed_predator: float = 1.2
     max_turn_rate: float = 0.7853981633974483  # pi/4 radians per step
-    sensing_range: float = 20.0
+    sensing_range_prey: float = 20.0
+    sensing_range_predator: float = 20.0
     eat_radius: float = 1.0
     predator_catch_energy: float = 0.4
     sigma_mutation: float = 0.05

@@ -1,7 +1,7 @@
 import torch
 
 from redqueen.config import Config
-from redqueen.sim import compute_sensory_inputs, step, step_controllers
+from redqueen.sim import compute_sensory_inputs, step, step_controllers, topk_relative_features
 from redqueen.world import init_world
 
 
@@ -18,6 +18,48 @@ def _small_cfg(**overrides) -> Config:
     for k, v in overrides.items():
         setattr(cfg, k, v)
     return cfg
+
+
+def test_topk_relative_features_max_range_zero_pads_out_of_range_entities():
+    # Two agents 10 units apart on a large torus (no wraparound ambiguity).
+    self_pos = torch.tensor([[0.0, 0.0]])
+    other_pos = torch.tensor([[10.0, 0.0]])
+    valid = torch.ones((1, 1), dtype=torch.bool)
+
+    out_of_range = topk_relative_features(self_pos, other_pos, valid, k=1, world_size=1000.0, max_range=5.0)
+    assert torch.allclose(out_of_range, torch.zeros_like(out_of_range))
+
+    in_range = topk_relative_features(self_pos, other_pos, valid, k=1, world_size=1000.0, max_range=15.0)
+    assert in_range[0, 2].item() == 10.0  # the distance component
+    assert not torch.allclose(in_range, torch.zeros_like(in_range))
+
+
+def test_sensing_range_is_species_specific_in_compute_sensory_inputs():
+    """A prey with a short sensing range shouldn't see a same-species
+    neighbour that a prey with a long range would see, at the same distance."""
+    cfg_short = Config(
+        world_size=1000.0, max_prey=2, max_predators=1, food_max_patches=1,
+        k_neighbours=1, hidden_dim=4, sensing_range_prey=5.0, device="cpu",
+    )
+    cfg_long = Config(
+        world_size=1000.0, max_prey=2, max_predators=1, food_max_patches=1,
+        k_neighbours=1, hidden_dim=4, sensing_range_prey=50.0, device="cpu",
+    )
+    gen = torch.Generator().manual_seed(0)
+
+    for cfg, expect_zero in ((cfg_short, True), (cfg_long, False)):
+        state = init_world(cfg, "cpu", gen)
+        state.prey.positions[0] = torch.tensor([0.0, 0.0])
+        state.prey.positions[1] = torch.tensor([10.0, 0.0])
+        state.prey.alive[:] = True
+        state.predator.alive[:] = False  # isolate the same-species channel
+
+        obs_prey, _ = compute_sensory_inputs(state, cfg)
+        same_species_feat = obs_prey[0, :3]  # (dx, dy, dist) to nearest same-species neighbour
+        if expect_zero:
+            assert torch.allclose(same_species_feat, torch.zeros(3))
+        else:
+            assert same_species_feat[2].item() == 10.0
 
 
 def test_compute_sensory_inputs_shapes():

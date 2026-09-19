@@ -55,10 +55,14 @@ def topk_relative_features(
     valid_mask: torch.Tensor,
     k: int,
     world_size: float,
+    max_range: float | None = None,
 ) -> torch.Tensor:
     """Egocentric (dx, dy, dist) to the k nearest valid `other` entities, per row of `self_pos`.
 
     valid_mask: [Na, Nb] bool, e.g. alive & not-self & (for food) has-food.
+    `max_range`: entities farther than this are treated the same as absent
+    (zero-padded), i.e. this is a hard perceptual range, not just "closest k
+    regardless of distance". None means unlimited range.
     Rows/entities with fewer than k valid neighbours are zero-padded.
     Returns [Na, k*3].
 
@@ -70,6 +74,8 @@ def topk_relative_features(
     delta = torus_delta(self_pos, other_pos, world_size)  # [Na, Nb, 2]
     dist = torch.linalg.norm(delta, dim=-1)  # [Na, Nb]
     dist = dist.masked_fill(~valid_mask, float("inf"))
+    if max_range is not None:
+        dist = dist.masked_fill(dist > max_range, float("inf"))
 
     k = min(k, dist.shape[1])
     topk_dist, idx = torch.topk(dist, k, dim=-1, largest=False)  # [Na, k]
@@ -98,16 +104,19 @@ def compute_sensory_inputs(
 
     food_has = state.food_amount > 0
 
+    r_prey = cfg.sensing_range_prey
+    r_pred = cfg.sensing_range_predator
+
     # --- prey observations ---
     valid_pp = prey.alive[None, :] & prey.alive[:, None] & ~eye_prey
-    feat_prey_same = topk_relative_features(prey.positions, prey.positions, valid_pp, k, ws)
+    feat_prey_same = topk_relative_features(prey.positions, prey.positions, valid_pp, k, ws, r_prey)
 
     valid_pd = prey.alive[:, None] & pred.alive[None, :]
-    feat_prey_opp = topk_relative_features(prey.positions, pred.positions, valid_pd, k, ws)
+    feat_prey_opp = topk_relative_features(prey.positions, pred.positions, valid_pd, k, ws, r_prey)
 
     valid_pf = prey.alive[:, None] & food_has[None, :]
     feat_prey_food = topk_relative_features(
-        prey.positions, state.food_positions, valid_pf, k, ws
+        prey.positions, state.food_positions, valid_pf, k, ws, r_prey
     )
 
     energy_norm_prey = (prey.energy / cfg.reproduction_threshold).clamp(0, 1).unsqueeze(-1)
@@ -117,10 +126,10 @@ def compute_sensory_inputs(
 
     # --- predator observations ---
     valid_dd = pred.alive[None, :] & pred.alive[:, None] & ~eye_pred
-    feat_pred_same = topk_relative_features(pred.positions, pred.positions, valid_dd, k, ws)
+    feat_pred_same = topk_relative_features(pred.positions, pred.positions, valid_dd, k, ws, r_pred)
 
     valid_dp = pred.alive[:, None] & prey.alive[None, :]
-    feat_pred_opp = topk_relative_features(pred.positions, prey.positions, valid_dp, k, ws)
+    feat_pred_opp = topk_relative_features(pred.positions, prey.positions, valid_dp, k, ws, r_pred)
 
     feat_pred_food = torch.zeros((n_pred, k * 3), device=pred.positions.device)  # no food access
 

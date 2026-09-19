@@ -47,20 +47,22 @@ def _trial_obs(
     device = pred_pos.device
     k = cfg.k_neighbours
     ws = cfg.world_size
+    r_prey = cfg.sensing_range_prey
+    r_pred = cfg.sensing_range_predator
     n_pred, n_prey = pred_pos.shape[0], prey_pos.shape[0]
 
     eye_pred = torch.eye(n_pred, dtype=torch.bool, device=device)
     eye_dp = torch.ones((n_pred, n_prey), dtype=torch.bool, device=device)
-    feat_pred_same = topk_relative_features(pred_pos, pred_pos, ~eye_pred, k, ws)
-    feat_pred_opp = topk_relative_features(pred_pos, prey_pos, eye_dp, k, ws)
+    feat_pred_same = topk_relative_features(pred_pos, pred_pos, ~eye_pred, k, ws, r_pred)
+    feat_pred_opp = topk_relative_features(pred_pos, prey_pos, eye_dp, k, ws, r_pred)
     feat_pred_food = torch.zeros((n_pred, k * 3), device=device)
     energy_pred = torch.full((n_pred, 1), 0.5, device=device)
     obs_pred = torch.cat([feat_pred_same, feat_pred_opp, feat_pred_food, energy_pred], dim=-1)
 
     eye_prey = torch.eye(n_prey, dtype=torch.bool, device=device)
     eye_pd = torch.ones((n_prey, n_pred), dtype=torch.bool, device=device)
-    feat_prey_same = topk_relative_features(prey_pos, prey_pos, ~eye_prey, k, ws)
-    feat_prey_opp = topk_relative_features(prey_pos, pred_pos, eye_pd, k, ws)
+    feat_prey_same = topk_relative_features(prey_pos, prey_pos, ~eye_prey, k, ws, r_prey)
+    feat_prey_opp = topk_relative_features(prey_pos, pred_pos, eye_pd, k, ws, r_prey)
     feat_prey_food = torch.zeros((n_prey, k * 3), device=device)
     energy_prey = torch.full((n_prey, 1), 0.5, device=device)
     obs_prey = torch.cat([feat_prey_same, feat_prey_opp, feat_prey_food, energy_prey], dim=-1)
