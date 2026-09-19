@@ -33,9 +33,29 @@ def main() -> None:
     parser.add_argument("--device", type=str, default=Config().device)
     parser.add_argument("--no-compile", action="store_true", help="disable torch.compile")
     parser.add_argument("--out", type=str, default="results/experiment.json")
+    # §7b sweep overrides. Defaults match Config()'s own defaults, so
+    # omitting all of these reproduces the §7a headline config exactly.
+    parser.add_argument("--sigma-mutation", type=float, default=Config().sigma_mutation)
+    parser.add_argument("--max-prey", type=int, default=Config().max_prey)
+    parser.add_argument("--max-predators", type=int, default=Config().max_predators)
+    parser.add_argument("--world-size", type=float, default=Config().world_size)
+    parser.add_argument("--food-max-patches", type=int, default=Config().food_max_patches)
+    parser.add_argument("--sensing-range-prey", type=float, default=Config().sensing_range_prey)
+    parser.add_argument(
+        "--sensing-range-predator", type=float, default=Config().sensing_range_predator
+    )
     args = parser.parse_args()
 
-    cfg = Config(device=args.device)
+    cfg = Config(
+        device=args.device,
+        sigma_mutation=args.sigma_mutation,
+        max_prey=args.max_prey,
+        max_predators=args.max_predators,
+        world_size=args.world_size,
+        food_max_patches=args.food_max_patches,
+        sensing_range_prey=args.sensing_range_prey,
+        sensing_range_predator=args.sensing_range_predator,
+    )
 
     t0 = time.time()
     result = run_experiment(
@@ -54,6 +74,7 @@ def main() -> None:
     out = {
         "seeds": args.seeds,
         "n_steps": args.n_steps,
+        "config": asdict(cfg),
         "total_time_s": dt,
         "arms_race_verdict": result.arms_race_verdict(),
         "results": [],
