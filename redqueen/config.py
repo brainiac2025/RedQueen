@@ -33,10 +33,15 @@ class Config:
     # sim
     n_steps: int = 100_000
     n_parallel_worlds: int = 32
-    competence_sample_interval: int = 2000
-    competence_n_trials: int = 200
     device: str = "cuda"
     seed: int = 0
+
+    # competence measurement (architecture §6/§7a)
+    reference_burn_in_steps: int = 2000  # freeze the reference genome after this many
+    # steps rather than at generation 0, so it isn't a degenerate never-evolved opponent
+    competence_sample_interval: int = 2000  # evolutionary steps between competence checkpoints
+    competence_n_trials: int = 200  # genomes sampled from the live population per checkpoint
+    competence_trial_steps: int = 200  # simulation steps run per sampled-genome trial
 
     @property
     def obs_dim(self) -> int:

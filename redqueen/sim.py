@@ -48,7 +48,7 @@ def torus_delta(a: torch.Tensor, b: torch.Tensor, world_size: float) -> torch.Te
     return delta - world_size * torch.round(delta / world_size)
 
 
-def _topk_relative_features(
+def topk_relative_features(
     self_pos: torch.Tensor,
     other_pos: torch.Tensor,
     valid_mask: torch.Tensor,
@@ -60,6 +60,10 @@ def _topk_relative_features(
     valid_mask: [Na, Nb] bool, e.g. alive & not-self & (for food) has-food.
     Rows/entities with fewer than k valid neighbours are zero-padded.
     Returns [Na, k*3].
+
+    Shared by `compute_sensory_inputs` (the live ecological sim) and
+    `competence.py`'s fixed-reference trials, which need the same egocentric
+    sensing but without a slot-array `alive` mask.
     """
     na = self_pos.shape[0]
     delta = torus_delta(self_pos, other_pos, world_size)  # [Na, Nb, 2]
@@ -95,13 +99,13 @@ def compute_sensory_inputs(
 
     # --- prey observations ---
     valid_pp = prey.alive[None, :] & prey.alive[:, None] & ~eye_prey
-    feat_prey_same = _topk_relative_features(prey.positions, prey.positions, valid_pp, k, ws)
+    feat_prey_same = topk_relative_features(prey.positions, prey.positions, valid_pp, k, ws)
 
     valid_pd = prey.alive[:, None] & pred.alive[None, :]
-    feat_prey_opp = _topk_relative_features(prey.positions, pred.positions, valid_pd, k, ws)
+    feat_prey_opp = topk_relative_features(prey.positions, pred.positions, valid_pd, k, ws)
 
     valid_pf = prey.alive[:, None] & food_has[None, :]
-    feat_prey_food = _topk_relative_features(
+    feat_prey_food = topk_relative_features(
         prey.positions, state.food_positions, valid_pf, k, ws
     )
 
@@ -112,10 +116,10 @@ def compute_sensory_inputs(
 
     # --- predator observations ---
     valid_dd = pred.alive[None, :] & pred.alive[:, None] & ~eye_pred
-    feat_pred_same = _topk_relative_features(pred.positions, pred.positions, valid_dd, k, ws)
+    feat_pred_same = topk_relative_features(pred.positions, pred.positions, valid_dd, k, ws)
 
     valid_dp = pred.alive[:, None] & prey.alive[None, :]
-    feat_pred_opp = _topk_relative_features(pred.positions, prey.positions, valid_dp, k, ws)
+    feat_pred_opp = topk_relative_features(pred.positions, prey.positions, valid_dp, k, ws)
 
     feat_pred_food = torch.zeros((n_pred, k * 3), device=pred.positions.device)  # no food access
 
@@ -131,6 +135,33 @@ def step_controllers(obs: torch.Tensor, genomes: torch.Tensor, cfg: Config) -> t
     """obs: [N, obs_dim], genomes: [N, genome_dim] -> actions [N, 2] (turn_rate in [-1,1], speed in [0,1])."""
     params = unpack(genomes, cfg)
     return batched_forward(params, obs)
+
+
+def apply_movement(
+    positions: torch.Tensor,
+    headings: torch.Tensor,
+    actions: torch.Tensor,
+    max_speed: float,
+    cfg: Config,
+    alive: torch.Tensor | None = None,
+) -> tuple[torch.Tensor, torch.Tensor]:
+    """actions: [N,2] (turn_rate in [-1,1], speed in [0,1]) -> updated (positions, headings).
+
+    `alive=None` moves every row unconditionally (used by competence.py's
+    trial arenas, which have no slot-array death/birth to mask around).
+    """
+    turn = actions[:, 0] * cfg.max_turn_rate
+    speed = actions[:, 1] * max_speed
+    new_headings = headings + turn
+    dx = torch.cos(new_headings) * speed
+    dy = torch.sin(new_headings) * speed
+    step_vec = torch.stack([dx, dy], dim=-1)
+    new_positions = (positions + step_vec) % cfg.world_size
+
+    if alive is not None:
+        new_headings = torch.where(alive, new_headings, headings)
+        new_positions = torch.where(alive.unsqueeze(-1), new_positions, positions)
+    return new_positions, new_headings
 
 
 def _reproduce(
@@ -228,14 +259,8 @@ def step_physics(
         (prey, actions_prey, cfg.max_speed_prey),
         (pred, actions_pred, cfg.max_speed_predator),
     ):
-        turn = actions[:, 0] * cfg.max_turn_rate
-        speed = actions[:, 1] * max_speed
-        pop.headings = torch.where(pop.alive, pop.headings + turn, pop.headings)
-        dx = torch.cos(pop.headings) * speed
-        dy = torch.sin(pop.headings) * speed
-        step_vec = torch.stack([dx, dy], dim=-1)
-        pop.positions = torch.where(
-            pop.alive.unsqueeze(-1), (pop.positions + step_vec) % ws, pop.positions
+        pop.positions, pop.headings = apply_movement(
+            pop.positions, pop.headings, actions, max_speed, cfg, alive=pop.alive
         )
 
     # --- metabolism ---
