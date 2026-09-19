@@ -141,8 +141,8 @@ class ExperimentResult:
             and not r.realized_prey_trend.significant
         )
         return (
-            f"{arms_race}/{n} seeds show the full §5 arms-race signature "
-            f"(both competence series increasing AND realized rates stationary); "
+            f"{arms_race}/{n} seeds show the full arms-race signature (architecture section 5: "
+            f"both competence series increasing AND realized rates stationary); "
             f"{competence_both_up}/{n} show both-competence-increasing alone; "
             f"{realized_stationary}/{n} show realized-rate stationarity alone"
         )
