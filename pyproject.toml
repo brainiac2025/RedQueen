@@ -8,6 +8,7 @@ dependencies = [
     "numpy",
     "scipy",
     "matplotlib",
+    "pymannkendall",
 ]
 
 [project.optional-dependencies]

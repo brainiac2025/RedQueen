@@ -37,6 +37,7 @@ class StepStats:
     predator_deaths: torch.Tensor
     mean_prey_energy: torch.Tensor
     mean_predator_energy: torch.Tensor
+    catches: torch.Tensor  # predation events this step (distinct from prey_deaths, which also counts starvation)
 
     def item(self) -> "StepStats":
         return StepStats(**{k: v.item() for k, v in vars(self).items()})
@@ -294,6 +295,7 @@ def step_physics(
         torch.zeros_like(min_dist_per_prey),
     )
     pred.energy = pred.energy.scatter_add(0, claimant_pred, catch_contribution)
+    catches = prey_eaten.sum()  # genuine predation events, distinct from prey_deaths (also counts starvation)
     prey.alive = prey.alive & ~prey_eaten
 
     # Satiation cap: once a population sits at its slot cap, agents that clear
@@ -341,6 +343,7 @@ def step_physics(
         predator_deaths=pred_deaths,
         mean_prey_energy=mean_prey_energy,
         mean_predator_energy=mean_predator_energy,
+        catches=catches,
     )
     return state, stats
 
