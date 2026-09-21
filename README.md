@@ -2,7 +2,9 @@
 
 Open-ended predator-prey co-evolution with evolved neural controllers, and a
 quantified test for whether an evolutionary arms race actually emerges. See
-[redqueen-architecture.md](redqueen-architecture.md) for the full design.
+[redqueen-architecture.md](redqueen-architecture.md) for the full design and
+**[writeup.md](writeup.md) for the actual findings** — spoiler: no arms race,
+one-sided predator escalation instead.
 
 ![Playback of a 10,000-step evolutionary run: prey (blue) cluster into
 flocks, predators (red) hunt them, food (green) depletes locally in dense
@@ -99,4 +101,8 @@ an interesting emergent behaviour not visible in the aggregate statistics:
 prey visibly self-organize into dense flocks as the population reaches its
 cap, with food locally depleted inside clusters.
 
-Next: the §11 write-up (4-6 pages) is the one remaining deliverable.
+**All four deliverables are done**: the repo with tests, the quantified
+arms-race detector and its result, the playback visualisation, and
+[writeup.md](writeup.md). Honest open items: `mode="reduce-overhead"` CUDA
+graphs (performance, not correctness), and the unrooted `torch.compile`
+cross-shape bug's true cause (worked around, not fixed at the source).
