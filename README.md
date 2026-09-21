@@ -40,6 +40,9 @@ pytest
 python scripts/run_experiment.py --seeds 0 1 2 3 4 --n-steps 100000 --out results/experiment.json
 python scripts/run_sweeps.py --out-dir results/sweeps
 python scripts/render_playback.py --n-steps 10000 --sample-every 40 --out media/playback_demo.gif
+
+# or watch it happen live in a window instead of rendering to a file:
+python scripts/render_playback.py --live --steps-per-frame 2
 ```
 
 ## Status

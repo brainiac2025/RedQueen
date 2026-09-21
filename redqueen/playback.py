@@ -67,6 +67,49 @@ def record_playback(
     return frames
 
 
+def _setup_figure(cfg: Config, n_food: int, figsize: float, title_suffix: str = ""):
+    import matplotlib.pyplot as plt
+
+    fig, ax = plt.subplots(figsize=(figsize, figsize))
+    ax.set_xlim(0, cfg.world_size)
+    ax.set_ylim(0, cfg.world_size)
+    ax.set_aspect("equal")
+    ax.set_xticks([])
+    ax.set_yticks([])
+    ax.set_facecolor("#0b1220")
+    fig.patch.set_facecolor("#0b1220")
+
+    food_scatter = ax.scatter(
+        np.zeros(n_food),
+        np.zeros(n_food),
+        s=18,
+        marker="s",
+        facecolor=np.zeros((n_food, 4)),
+        edgecolors="none",
+    )
+    prey_scatter = ax.scatter([], [], s=8, c="#4da6ff", marker="o", label="prey")
+    pred_scatter = ax.scatter([], [], s=34, c="#ff4d4d", marker="^", label="predator")
+    title = ax.set_title("", color="white", fontsize=11)
+    ax.legend(loc="upper right", framealpha=0.3, labelcolor="white", fontsize=8)
+    return fig, ax, food_scatter, prey_scatter, pred_scatter, title
+
+
+def _apply_frame(
+    f: Frame, cfg: Config, food_scatter, prey_scatter, pred_scatter, title, extra: str = ""
+) -> None:
+    food_scatter.set_offsets(f.food_positions)
+    colors = np.zeros((f.food_amount.shape[0], 4))
+    colors[:, 1] = 0.75  # green channel
+    colors[:, 3] = np.clip(f.food_amount / cfg.food_energy, 0.0, 1.0)  # alpha
+    food_scatter.set_facecolor(colors)
+
+    prey_scatter.set_offsets(f.prey_positions if f.prey_positions.size else np.empty((0, 2)))
+    pred_scatter.set_offsets(
+        f.predator_positions if f.predator_positions.size else np.empty((0, 2))
+    )
+    title.set_text(f"step {f.step:,}{extra}  |  prey={f.n_prey}  predators={f.n_predators}")
+
+
 def render_gif(
     frames: list[Frame],
     cfg: Config,
@@ -81,43 +124,64 @@ def render_gif(
     import matplotlib.animation as animation
     import matplotlib.pyplot as plt
 
-    fig, ax = plt.subplots(figsize=(figsize, figsize))
-    ax.set_xlim(0, cfg.world_size)
-    ax.set_ylim(0, cfg.world_size)
-    ax.set_aspect("equal")
-    ax.set_xticks([])
-    ax.set_yticks([])
-    ax.set_facecolor("#0b1220")
-    fig.patch.set_facecolor("#0b1220")
-
     n_food = frames[0].food_positions.shape[0]
-    food_scatter = ax.scatter(
-        frames[0].food_positions[:, 0],
-        frames[0].food_positions[:, 1],
-        s=18,
-        marker="s",
-        facecolor=np.zeros((n_food, 4)),
-        edgecolors="none",
-    )
-    prey_scatter = ax.scatter([], [], s=8, c="#4da6ff", marker="o", label="prey")
-    pred_scatter = ax.scatter([], [], s=34, c="#ff4d4d", marker="^", label="predator")
-    title = ax.set_title("", color="white", fontsize=11)
-    ax.legend(loc="upper right", framealpha=0.3, labelcolor="white", fontsize=8)
+    fig, ax, food_scatter, prey_scatter, pred_scatter, title = _setup_figure(cfg, n_food, figsize)
 
     def update(i: int):
-        f = frames[i]
-        colors = np.zeros((f.food_amount.shape[0], 4))
-        colors[:, 1] = 0.75  # green channel
-        colors[:, 3] = np.clip(f.food_amount / cfg.food_energy, 0.0, 1.0)  # alpha
-        food_scatter.set_facecolor(colors)
-
-        prey_scatter.set_offsets(f.prey_positions if f.prey_positions.size else np.empty((0, 2)))
-        pred_scatter.set_offsets(
-            f.predator_positions if f.predator_positions.size else np.empty((0, 2))
-        )
-        title.set_text(f"step {f.step:,}  |  prey={f.n_prey}  predators={f.n_predators}")
+        _apply_frame(frames[i], cfg, food_scatter, prey_scatter, pred_scatter, title)
         return food_scatter, prey_scatter, pred_scatter, title
 
     anim = animation.FuncAnimation(fig, update, frames=len(frames), blit=False)
     anim.save(out_path, writer="pillow", fps=fps, dpi=dpi)
     plt.close(fig)
+
+
+def live_view(
+    cfg: Config,
+    generator: torch.Generator,
+    n_steps: int = 100_000,
+    steps_per_frame: int = 1,
+    interval_ms: int = 33,
+    compiled: bool = True,
+    figsize: float = 6.0,
+) -> None:
+    """Opens an interactive window and runs the simulation live: each
+    rendered frame advances the simulation by `steps_per_frame` steps, so
+    you watch it happen rather than watching a pre-recorded GIF. Close the
+    window (or let it reach n_steps) to stop.
+
+    Uses the same _snapshot/boolean-mask-indexing approach as
+    record_playback — fine here since it's gated by the display frame rate
+    (tens of Hz), nowhere near the per-simulation-step hot loop.
+    """
+    import matplotlib
+
+    matplotlib.use("TkAgg")
+    import matplotlib.animation as animation
+    import matplotlib.pyplot as plt
+
+    step_fn = torch.compile(step) if compiled else step
+    state = init_world(cfg, cfg.device, generator)
+    step_count = 0
+
+    fig, ax, food_scatter, prey_scatter, pred_scatter, title = _setup_figure(
+        cfg, cfg.food_max_patches, figsize
+    )
+    fig.canvas.manager.set_window_title("RedQueen — live")
+
+    def update(_frame_idx):
+        nonlocal state, step_count
+        for _ in range(steps_per_frame):
+            if step_count >= n_steps:
+                break
+            state, _ = step_fn(state, cfg, generator)
+            step_count += 1
+        f = _snapshot(state, step_count)
+        _apply_frame(f, cfg, food_scatter, prey_scatter, pred_scatter, title, extra=f" / {n_steps:,}")
+        return food_scatter, prey_scatter, pred_scatter, title
+
+    n_frames = n_steps // max(steps_per_frame, 1) + 1
+    anim = animation.FuncAnimation(
+        fig, update, frames=n_frames, interval=interval_ms, blit=False, cache_frame_data=False
+    )
+    plt.show()
